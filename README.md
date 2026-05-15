@@ -5,6 +5,12 @@ management app on top of ROS2 Humble. Uses `rmw_zenoh_cpp` as the ROS2
 middleware so the same nodes can later peer with a cloud-hosted Zenoh
 router over arbitrary networks.
 
+`rmw_zenoh` has no apt binary for Humble, so the Dockerfile builds it
+from source from the [`humble` branch of ros2/rmw_zenoh][rmw-zenoh] into
+`/opt/rmw_zenoh`. That overlay is sourced automatically in the shell.
+
+[rmw-zenoh]: https://github.com/ros2/rmw_zenoh/tree/humble
+
 ## Layout
 
 ```

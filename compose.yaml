@@ -6,6 +6,7 @@ services:
         USER_UID: ${USER_UID:-1000}
         USER_GID: ${USER_GID:-1000}
     image: ros2_humble_zenoh:dev
+    pull_policy: build
     container_name: ros2_humble_zenoh
     hostname: ros2-dev
     network_mode: host

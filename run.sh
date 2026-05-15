@@ -12,6 +12,10 @@ fi
 export USER_UID="$(id -u)"
 export USER_GID="$(id -g)"
 
+# Ensure the image is built locally (avoids docker trying to pull the
+# locally-tagged image from a registry on first run).
+docker compose build ros2
+
 # Use `run --rm` so each interactive shell is a fresh container; the workspace
 # is bind-mounted so nothing important lives inside the container itself.
 exec docker compose run --rm --service-ports ros2 bash
