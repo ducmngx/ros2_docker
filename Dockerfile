@@ -39,6 +39,10 @@ RUN mkdir -p /opt/rmw_zenoh/src \
     && colcon build --cmake-args -DCMAKE_BUILD_TYPE=Release \
     && rm -rf /var/lib/apt/lists/* /opt/rmw_zenoh/build /opt/rmw_zenoh/log
 
+# Source the rmw_zenoh overlay in the image entrypoint so non-interactive
+# shells (e.g. `docker run image ros2 ...`) also pick up librmw_zenoh_cpp.so.
+RUN sed -i '/source "\/opt\/ros\/\$ROS_DISTRO\/setup.bash"/a source "/opt/rmw_zenoh/install/setup.bash" --' /ros_entrypoint.sh
+
 RUN groupadd --gid ${USER_GID} ${USERNAME} \
     && useradd --uid ${USER_UID} --gid ${USER_GID} -m -s /bin/bash ${USERNAME} \
     && echo "${USERNAME} ALL=(ALL) NOPASSWD:ALL" > /etc/sudoers.d/${USERNAME} \
