@@ -21,6 +21,13 @@ services:
       RMW_IMPLEMENTATION: rmw_zenoh_cpp
       ZENOH_SESSION_CONFIG_URI: /home/dev/zenoh_config/session.lan.json5
       ZENOH_ROUTER_CONFIG_URI: /home/dev/zenoh_config/router.json5
+      # Number of times each ros2 node retries finding the Zenoh router
+      # during startup. Default is 1 (too aggressive over LAN — fails
+      # before TCP fully comes up, then the node "proceeds without
+      # router" and subscriptions silently never deliver). 10 is
+      # generous; bump higher if you see "Unable to connect to a Zenoh
+      # router after 10 attempt(s)" warnings.
+      ZENOH_ROUTER_CHECK_ATTEMPTS: "10"
       ROS_DOMAIN_ID: "0"
     volumes:
       - /tmp/.X11-unix:/tmp/.X11-unix:rw
