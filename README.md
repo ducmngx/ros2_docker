@@ -19,6 +19,7 @@ ros2_docker/
 ├── compose.yaml        # service definition (network=host, X11, /dev, volumes)
 ├── run.sh              # build (first time) + enter a fresh container
 ├── exec.sh             # attach a second shell to a running container
+├── router.sh           # start the Zenoh router (rmw_zenohd) in the container
 ├── ros2_ws/            # your colcon workspace (host-editable, mounted in)
 │   └── src/
 └── zenoh_config/
@@ -36,14 +37,16 @@ ros2_docker/
    You should land in `dev@ros2-dev:~/ros2_ws$` with ROS2 already sourced and
    `RMW_IMPLEMENTATION=rmw_zenoh_cpp` set.
 
-2. **Start the Zenoh router** (required for rmw_zenoh discovery, run once):
+2. **Start the Zenoh router** in a second host terminal (required — every
+   ros2 process expects it, and discovery is unreliable without it):
 
    ```bash
-   ros2 run rmw_zenoh_cpp rmw_zenohd
+   ./router.sh
    ```
 
-   Leave it running. Open a second terminal with `./exec.sh` for everything
-   else below.
+   Leave it running. Open more terminals with `./exec.sh` for everything
+   else below. If you see `Unable to connect to a Zenoh router` warnings,
+   the router isn't running.
 
 3. **Smoke test** the middleware:
 
