@@ -22,10 +22,14 @@ ros2_docker/
 ├── router.sh           # start the Zenoh router (rmw_zenohd) in the container
 ├── ros2_ws/            # your colcon workspace (host-editable, mounted in)
 │   └── src/
+├── set-router-host.sh # rewrite session.lan.json5's connect.endpoints
 └── zenoh_config/
     ├── session.json5       # Peer config for the router-host machine (localhost)
     ├── session.lan.json5   # Peer config for remote machines (dial router over LAN)
-    └── router.json5        # Router (rmw_zenohd) config
+    ├── router.json5        # Router (rmw_zenohd) config
+    └── templates/          # Pristine upstream defaults for reference / restore
+        ├── session.default.json5
+        └── router.default.json5
 ```
 
 For running across two machines on the same LAN, see

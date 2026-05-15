@@ -62,15 +62,20 @@ cd ros2_docker
 
 Two edits — both on the host filesystem, no rebuild required:
 
-**1. `zenoh_config/session.lan.json5`** — find the placeholder line
-inside the `connect: { ... }` block (line ~65) and replace
-`REPLACE-WITH-ROUTER-IP` with machine A's LAN IP:
+**1. Set the router endpoint** in `zenoh_config/session.lan.json5`:
 
-```json5
-endpoints: [
-  "tcp/192.168.0.121:7447"     // <-- machine A's IP
-],
+```bash
+./set-router-host.sh 192.168.0.121   # machine A's LAN IP
 ```
+
+The helper edits `connect.endpoints` in place (only that block — it
+leaves `listen.endpoints` alone). It's idempotent, so re-running it
+with a new host just overwrites the previous endpoint. You can also
+pass an explicit `host:port`, e.g. `./set-router-host.sh router.example.com:7447`.
+
+If you'd rather hand-edit: open `zenoh_config/session.lan.json5`, find
+the `connect: { ... }` block (line ~65), and replace
+`REPLACE-WITH-ROUTER-IP` with the router host.
 
 **2. `compose.yaml`** — change the session config env var to point at
 the LAN variant:
