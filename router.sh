@@ -12,4 +12,4 @@ if [ -z "${container}" ]; then
     exit 1
 fi
 
-exec docker exec -it "${container}" bash -lc 'ros2 run rmw_zenoh_cpp rmw_zenohd'
+exec docker exec -it "${container}" /ros_entrypoint.sh ros2 run rmw_zenoh_cpp rmw_zenohd
