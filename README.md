@@ -23,8 +23,14 @@ ros2_docker/
 ├── ros2_ws/            # your colcon workspace (host-editable, mounted in)
 │   └── src/
 └── zenoh_config/
-    └── session.json5   # Zenoh RMW session config (edit to point at cloud router)
+    ├── session.json5       # Peer config for the router-host machine (localhost)
+    ├── session.lan.json5   # Peer config for remote machines (dial router over LAN)
+    └── router.json5        # Router (rmw_zenohd) config
 ```
+
+For running across two machines on the same LAN, see
+[MULTI_MACHINE.md](MULTI_MACHINE.md). For things that broke during
+initial setup and the fixes, see [TROUBLESHOOTING.md](TROUBLESHOOTING.md).
 
 ## Quickstart
 
