@@ -1,0 +1,29 @@
+services:
+  ros2:
+    build:
+      context: .
+      args:
+        USER_UID: ${USER_UID:-1000}
+        USER_GID: ${USER_GID:-1000}
+    image: ros2_humble_zenoh:dev
+    container_name: ros2_humble_zenoh
+    hostname: ros2-dev
+    network_mode: host
+    ipc: host
+    privileged: true
+    stdin_open: true
+    tty: true
+    environment:
+      DISPLAY: ${DISPLAY:-:0}
+      QT_X11_NO_MITSHM: "1"
+      XDG_RUNTIME_DIR: /tmp/runtime-dev
+      RMW_IMPLEMENTATION: rmw_zenoh_cpp
+      ZENOH_SESSION_CONFIG_URI: /home/dev/zenoh_config/session.json5
+      ROS_DOMAIN_ID: "0"
+    volumes:
+      - /tmp/.X11-unix:/tmp/.X11-unix:rw
+      - ${XAUTHORITY:-/home/${USER}/.Xauthority}:/home/dev/.Xauthority:rw
+      - /dev:/dev
+      - ./ros2_ws:/home/dev/ros2_ws
+      - ./zenoh_config:/home/dev/zenoh_config
+    command: bash

@@ -1,0 +1,34 @@
+// rmw_zenoh session config for the dev container.
+//
+// On first run, you can replace this file's contents with the upstream default
+// from inside the container at:
+//   /opt/ros/humble/share/rmw_zenoh_cpp/config/DEFAULT_RMW_ZENOH_SESSION_CONFIG.json5
+// then edit `connect.endpoints` below to point at your cloud Zenoh router.
+//
+// Starts as "peer" mode (LAN-style discovery). To talk to a cloud router over
+// arbitrary WiFi, switch `mode` to "client" and add the router endpoint to
+// `connect.endpoints`, e.g. "tcp/router.example.com:7447".
+{
+  mode: "peer",
+
+  connect: {
+    endpoints: [
+      // "tcp/router.example.com:7447",
+    ],
+  },
+
+  listen: {
+    endpoints: [
+      // "tcp/0.0.0.0:0",
+    ],
+  },
+
+  scouting: {
+    multicast: {
+      enabled: true,
+    },
+    gossip: {
+      enabled: true,
+    },
+  },
+}
