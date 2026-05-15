@@ -106,10 +106,13 @@
     ///
     /// See https://docs.rs/zenoh/latest/zenoh/config/struct.EndPoint.html
     ///
-    /// ROS setting: By default accept incoming connections only from localhost (i.e. from colocalized Nodes).
-    ///              All communications with other hosts are routed by the Zenoh router.
+    /// ROS setting: upstream default is ["tcp/localhost:0"], which lets
+    /// colocalized peers connect to each other directly. We deliberately
+    /// leave this EMPTY because the localhost address gets gossiped
+    /// across the router to remote peers, which then fail to dial it
+    /// (they hit their OWN loopback). All cross-host traffic should
+    /// route through rmw_zenohd — peers don't need to listen at all.
     endpoints: [
-      "tcp/localhost:0"
     ],
 
     /// Global listen configuration,
