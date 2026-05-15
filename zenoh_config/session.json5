@@ -1,25 +1,33 @@
 // rmw_zenoh session config for the dev container.
 //
-// On first run, you can replace this file's contents with the upstream default
-// from inside the container at:
-//   /opt/ros/humble/share/rmw_zenoh_cpp/config/DEFAULT_RMW_ZENOH_SESSION_CONFIG.json5
-// then edit `connect.endpoints` below to point at your cloud Zenoh router.
+// rmw_zenoh's discovery model: every ROS2 node is a Zenoh peer that
+// connects to a Zenoh router (rmw_zenohd). Without a reachable router
+// in `connect.endpoints`, peers can't discover each other.
 //
-// Starts as "peer" mode (LAN-style discovery). To talk to a cloud router over
-// arbitrary WiFi, switch `mode` to "client" and add the router endpoint to
-// `connect.endpoints`, e.g. "tcp/router.example.com:7447".
+// Local dev: keep "tcp/localhost:7447" so nodes connect to the router
+// started by ./router.sh.
+//
+// Cloud routing (later): add your cloud router endpoint to the list,
+// e.g. "tcp/router.example.com:7447". You can either keep the local
+// router too (peers join both) or remove it and rely entirely on the
+// cloud one.
+//
+// Full reference (much longer) is inside the container at:
+//   /opt/rmw_zenoh/install/rmw_zenoh_cpp/share/rmw_zenoh_cpp/config/DEFAULT_RMW_ZENOH_SESSION_CONFIG.json5
 {
   mode: "peer",
 
   connect: {
     endpoints: [
+      "tcp/localhost:7447",
       // "tcp/router.example.com:7447",
     ],
   },
 
   listen: {
     endpoints: [
-      // "tcp/0.0.0.0:0",
+      // Peers don't normally need to listen; the router does.
+      // Add e.g. "tcp/0.0.0.0:0" if you want this peer to accept incoming.
     ],
   },
 
