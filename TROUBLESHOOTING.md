@@ -1,0 +1,218 @@
+# Setup Postmortem
+
+Chronological record of every issue hit while bringing up the
+ROS2 Humble + rmw_zenoh dev container, what the symptom was, the root
+cause, and the fix.
+
+## 1. `ros-humble-rmw-zenoh-cpp` does not exist as an apt package
+
+**Symptom**
+
+```
+E: Unable to locate package ros-humble-rmw-zenoh-cpp
+```
+
+during `docker compose build`.
+
+**Root cause**
+
+`rmw_zenoh` is only released as an apt binary for Iron, Jazzy, and Rolling.
+On Humble it has to be built from source from the `humble` branch of
+[`ros2/rmw_zenoh`](https://github.com/ros2/rmw_zenoh/tree/humble).
+
+**Fix** (commit `86b4d56`)
+
+The Dockerfile now clones the repo, runs `rosdep install`, and
+`colcon build`s it into `/opt/rmw_zenoh/install` instead of installing
+from apt. `ros-humble-zenoh-cpp-vendor` (the zenoh-c vendor package) is
+still installed from apt because it is available.
+
+```dockerfile
+RUN mkdir -p /opt/rmw_zenoh/src \
+    && git clone --depth 1 --branch humble https://github.com/ros2/rmw_zenoh.git /opt/rmw_zenoh/src/rmw_zenoh \
+    && cd /opt/rmw_zenoh \
+    && . /opt/ros/humble/setup.sh \
+    && rosdep update --rosdistro=humble \
+    && apt-get update \
+    && rosdep install --from-paths src --ignore-src -y --rosdistro humble \
+    && colcon build --cmake-args -DCMAKE_BUILD_TYPE=Release \
+    && rm -rf /var/lib/apt/lists/* /opt/rmw_zenoh/build /opt/rmw_zenoh/log
+```
+
+## 2. Docker compose tried to pull the locally-tagged image
+
+**Symptom**
+
+```
+! ros2 Warning pull access denied for ros2_humble_zenoh, repository does
+  not exist or may require 'docker login'
+```
+
+on first `docker compose run`.
+
+**Root cause**
+
+`compose.yaml` declared `image: ros2_humble_zenoh:dev` *and* a `build:`
+block. Compose's default policy is to pull the image by tag before
+building. The tag only exists locally, so the pull fails.
+
+**Fix** (commit `86b4d56`)
+
+- Added `pull_policy: build` to the service definition.
+- `run.sh` now runs `docker compose build ros2` explicitly before
+  `docker compose run`, so first launches behave predictably.
+
+## 3. `librmw_zenoh_cpp.so` not loadable in non-interactive shells
+
+**Symptom**
+
+```
+[ERROR] [...] [rcl]: Error getting RMW implementation identifier /
+  RMW implementation not installed (expected identifier of
+  'rmw_zenoh_cpp'), with error message
+  'failed to load shared library "librmw_zenoh_cpp.so"'
+```
+
+from `ros2 doctor` and any `ros2 ...` command run through
+`docker compose run ... bash -c '...'` (non-interactive).
+
+**Root cause**
+
+The rmw_zenoh overlay was only sourced via `~/.bashrc`. Non-interactive
+shells (`bash -c`, `bash -lc`) do **not** source `~/.bashrc` by default,
+so `LD_LIBRARY_PATH` / `AMENT_PREFIX_PATH` never picked up
+`/opt/rmw_zenoh/install`.
+
+**Fix** (commit `872fa9a`)
+
+Source the overlay in `/ros_entrypoint.sh` (which *is* executed for every
+`docker run` invocation), right after the base ROS setup line:
+
+```dockerfile
+RUN sed -i '/source "\/opt\/ros\/\$ROS_DISTRO\/setup.bash"/a source "/opt/rmw_zenoh/install/setup.bash" --' /ros_entrypoint.sh
+```
+
+## 4. `router.sh`: `ros2: command not found`
+
+**Symptom**
+
+```
+bash: line 1: ros2: command not found
+```
+
+when running `./router.sh`.
+
+**Root cause**
+
+`docker exec` does **not** run the image entrypoint, only `docker run`
+does. Inside the exec'd `bash -lc 'ros2 ...'`:
+
+- A login bash sources `/etc/profile` and `~/.bash_profile`, **not**
+  `~/.bashrc`.
+- The ROS setup was therefore never sourced for this shell, so `ros2`
+  was missing from `PATH`.
+
+**Fix** (commit `006e5ad`)
+
+Invoke the entrypoint script explicitly so the ROS env is loaded the
+same way `docker run` would load it:
+
+```bash
+docker exec -it "$container" /ros_entrypoint.sh ros2 run rmw_zenoh_cpp rmw_zenohd
+```
+
+## 5. session.json5 was missing `connect.endpoints` → peers never dialed router
+
+**Symptom (early)**
+
+```
+[WARN] [rmw_zenoh_cpp]: Unable to connect to a Zenoh router. Have you
+started a router with `ros2 run rmw_zenoh_cpp rmw_zenohd`?
+```
+
+Even though `rmw_zenohd` was running and listening on `0.0.0.0:7447`.
+
+**Root cause**
+
+Our initial minimal `zenoh_config/session.json5` set
+`connect.endpoints: []`. With no endpoints to dial, peers never tried
+to connect to the local router and only relied on multicast/gossip
+scouting, which in a host-networked container produces self-echoes
+with empty locators.
+
+**Fix attempt (commit `1e057c8`)**
+
+Added `"tcp/localhost:7447"` to `connect.endpoints`. That cleared the
+warning — peers' TCP sockets to the router were now `ESTABLISHED`. But…
+
+## 6. **The big one** — partial session.json5 silently broke discovery
+
+**Symptom**
+
+`ros2 run demo_nodes_cpp talker` clearly printed
+`Publishing: 'Hello World: N'`, the talker had a working TCP connection
+to `rmw_zenohd` on `127.0.0.1:7447`, the listener also had a working
+TCP connection to the same router — yet the listener never received
+anything, `ros2 topic list` showed only `/parameter_events` and
+`/rosout`, `ros2 node list` was empty.
+
+Both peers spammed:
+
+```
+Received Hello with no locators: HelloProto { ..., locators: [] }
+```
+
+at 2-second intervals.
+
+**Root cause**
+
+The minimal `session.json5` only declared
+`mode`, `connect`, `listen`, and `scouting.{multicast,gossip}.enabled`.
+The upstream config has **820 lines** covering routing peer/router
+behaviour, QoS, transport, queries, timestamping, gossip propagation
+rules, link weights, and more. Many of those keys are interdependent.
+
+The very first lines of the upstream default warn:
+
+> Note that the values here are correctly typed, but may not be sensible,
+> so copying this file to change only the parts that matter to you is
+> not good practice.
+
+When required keys are missing, Zenoh falls back to defaults that
+**happen to break the rmw_zenoh graph-publication flow**: peers connect
+to the router but never publish graph (node/topic/QoS) data through it,
+so no other node ever learns of their existence.
+
+Verification of root cause: `env -u ZENOH_SESSION_CONFIG_URI ros2 run
+demo_nodes_cpp talker` (forcing rmw_zenoh to fall back to its built-in
+default) immediately produced a working setup — `/chatter` appeared in
+`topic list`, `/talker` in `node list`.
+
+**Fix** (commit `c98b977`)
+
+Replaced `zenoh_config/session.json5` with a verbatim copy of the
+upstream `DEFAULT_RMW_ZENOH_SESSION_CONFIG.json5` and added a short
+header pointing at the `connect.endpoints` block where a cloud router
+endpoint should be added later.
+
+## Cosmetic warnings that are NOT problems
+
+Even with everything working, you will still see these. They are
+harmless:
+
+| Warning | Why it appears | What to do |
+|---|---|---|
+| `Starting with no listener endpoints!` | rmw_zenoh peers don't accept inbound connections by default; only the router listens. | Ignore. Add `"tcp/0.0.0.0:0"` to `listen.endpoints` only if some other peer needs to dial *into* this node. |
+| `Received Hello with no locators` | Gossip/multicast scouting echoing back peers (often the same node hearing itself via host networking) that have no listen address. | Ignore. To silence completely, set `scouting.multicast.enabled: false` in `session.json5` — router-based discovery still works. |
+| `Scouting delay elapsed before start conditions are met.` | Zenoh waited the configured `scouting.delay` for peers before giving up and starting. | Ignore. Tune `scouting.delay` lower if you want faster startup. |
+
+## Workflow that actually works
+
+1. `./run.sh` — opens a container shell. Leave open.
+2. From a separate host terminal: `./router.sh`. Leave open — this is the
+   Zenoh router. Do not Ctrl+C unless you want to bring the fleet down.
+3. From more host terminals: `./exec.sh` to attach to the running
+   container, then run your ros2 nodes.
+
+`Unable to connect to a Zenoh router` warning means step 2 isn't running
+(or you killed it). Restart `./router.sh`.
