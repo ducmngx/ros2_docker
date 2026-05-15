@@ -28,8 +28,18 @@
   /// WARNING: this id must be unique in your zenoh network.
   // id: "1234567890abcdef",
 
-  /// The node's mode (router, peer or client)
-  mode: "peer",
+  /// The node's mode (router, peer or client).
+  /// We use "client" for LAN/remote peers because:
+  ///  - it only opens an outbound session to the router (no inbound peer
+  ///    listening, no gossip of local peer locators)
+  ///  - this avoids the cross-host bug where peers gossip their own
+  ///    "tcp/127.0.0.1:<random>" listen address through the router and
+  ///    remote peers fail to dial it
+  /// Trade-off vs "peer": colocalized nodes on this same host can no
+  ///   longer talk to each other directly — they always route through
+  ///   the (remote) router. For machines that ARE the router host, use
+  ///   `session.json5` (mode: "peer") instead.
+  mode: "client",
 
   /// Which endpoints to connect to. E.g. tcp/localhost:7447.
   /// By configuring the endpoints, it is possible to tell zenoh which router/peer to connect to at startup.
@@ -114,13 +124,12 @@
     ///
     /// See https://docs.rs/zenoh/latest/zenoh/config/struct.EndPoint.html
     ///
-    /// ROS setting: upstream default is ["tcp/localhost:0"], which lets
-    /// colocalized peers connect to each other directly. We deliberately
-    /// leave this EMPTY because the localhost address gets gossiped
-    /// across the router to remote peers, which then fail to dial it
-    /// (they hit their OWN loopback). All cross-host traffic should
-    /// route through rmw_zenohd — peers don't need to listen at all.
+    /// LAN/remote setting: keep upstream default. Cross-machine peer
+    /// listening doesn't matter because this peer is in `mode: "client"`
+    /// (see top of file), which means it only ever talks to the router
+    /// and never accepts inbound peer connections.
     endpoints: [
+      "tcp/localhost:0"
     ],
 
     /// Global listen configuration,
