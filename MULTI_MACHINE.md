@@ -25,7 +25,7 @@ and pub/sub traffic flow through it.
 - Both machines on the same LAN / WiFi (or VPN).
 - Machine A's LAN IP — run `ip -4 addr | grep inet` on machine A and
   pick the address on the interface that's on the same network as
-  machine B. Example: `192.168.0.121`.
+  machine B. The examples below use the placeholder `<ROUTER-IP>`.
 - TCP port `7447` reachable on machine A. If a host firewall is on:
   ```bash
   sudo ufw allow 7447/tcp
@@ -65,7 +65,7 @@ Two edits — both on the host filesystem, no rebuild required:
 **1. Set the router endpoint** in `zenoh_config/session.lan.json5`:
 
 ```bash
-./set-router-host.sh 192.168.0.121   # machine A's LAN IP
+./set-router-host.sh <ROUTER-IP>   # machine A's LAN IP
 ```
 
 The helper edits `connect.endpoints` in place (only that block — it
@@ -110,6 +110,30 @@ peer that connects to machine A's router.
    ros2 node list      # /talker AND /listener
    ros2 topic list     # includes /chatter
    ```
+
+## Why `session.lan.json5` uses `mode: "client"`
+
+Remote peers run in **client** mode, not **peer** mode. In peer mode,
+each ros2 node also accepts inbound connections on its local
+`listen.endpoints` (default `tcp/localhost:0`), and that local address
+gets gossiped through the router to other machines — who then try to
+dial `tcp/127.0.0.1:<port>` against their **own** loopback and fail.
+
+Client mode only ever opens an outbound session to the router and
+never advertises a local listener, sidestepping that bug. The
+trade-off is that colocalized nodes on a client-mode machine don't
+get direct P2P — they relay through the (remote) router. For
+machines that host the router themselves, use `session.json5`
+(`mode: "peer"`) so local nodes still get direct connections.
+
+## `ZENOH_ROUTER_CHECK_ATTEMPTS`
+
+`compose.yaml` sets this to `10`. The upstream default is `1`,
+which over LAN/WAN fails before TCP fully establishes — the peer
+then permanently degrades into "no router mode" and subscriptions
+silently never deliver. 10 attempts (~10s) covers typical home/lab
+networks; raise it if you see "after 10 attempt(s)" warnings on a
+slow link.
 
 ## Troubleshooting
 

@@ -195,6 +195,133 @@ upstream `DEFAULT_RMW_ZENOH_SESSION_CONFIG.json5` and added a short
 header pointing at the `connect.endpoints` block where a cloud router
 endpoint should be added later.
 
+## 7. Cross-machine: remote peer can reach router but `/chatter` never appears
+
+**Symptom**
+
+On the remote machine (the one that does NOT host `rmw_zenohd`):
+- `nc -vz <router-host> 7447` succeeds.
+- `docker exec ... ros2 topic echo /chatter --once` from a fresh
+  process *sometimes* receives a message.
+- `ros2 run demo_nodes_cpp listener` started in an interactive shell
+  prints `Unable to connect to a Zenoh router` warnings forever, and
+  never prints `I heard:`.
+- The remote peer's listener logs:
+  ```
+  Unable to connect to any locator of scouted peer <zid>: [tcp/127.0.0.1:<port>]
+  ```
+
+**Root cause**
+
+The upstream session config has `listen.endpoints: ["tcp/localhost:0"]`
+and `mode: "peer"`. On the router-host machine that's fine — colocalized
+peers connect to each other directly. But over a router, that local
+listen address gets gossiped to *remote* peers, who then try to dial
+`tcp/127.0.0.1:<port>` against their **own** loopback (which has
+nothing). The failed direct connection blocks the remote peer's graph
+state from converging.
+
+**Fix** (commit `1c63d44`)
+
+`zenoh_config/session.lan.json5` is set to `mode: "client"`. A
+client-mode Zenoh session:
+
+- only opens an outbound session to the router,
+- never accepts inbound peer connections,
+- never gossips a local peer locator that other hosts would dial.
+
+The router-host machine keeps `mode: "peer"` in `session.json5` so
+colocalized peers on that host still benefit from direct P2P. Remote
+peers always use `session.lan.json5`.
+
+**Don't** try to "fix" this by setting `listen.endpoints: []` —
+that prevents rmw_zenoh's liveliness/graph queries from working at
+all, even on a single machine. We tried; it failed in commit `b014694`
+and was immediately reverted.
+
+## 8. `Unable to connect to a Zenoh router after 1 attempt(s)`
+
+**Symptom**
+
+A peer launches, prints exactly one `Unable to connect to a Zenoh
+router` warning, then "proceeds with initialization but other peers
+will not discover or receive data from peers in this session until a
+router is started." After this, even if TCP to the router establishes
+moments later, the subscription is silently dead.
+
+**Root cause**
+
+`ZENOH_ROUTER_CHECK_ATTEMPTS` defaults to `1`. Over LAN, the
+TCP/handshake to a remote router can take longer than the one
+attempt's window — the peer gives up and degrades to "no router
+mode," and that degraded session never recovers, even after TCP
+later establishes.
+
+**Fix** (commit `99e7cf6`)
+
+`compose.yaml` sets `ZENOH_ROUTER_CHECK_ATTEMPTS: "10"`. With 10
+attempts (~10 seconds), the peer is patient enough to find a remote
+router on any normal LAN.
+
+If you see `after 10 attempt(s)` in a deploy, bump it higher —
+e.g. `20` for slow links or hot starts.
+
+## 9. **The really nasty one** — `.bashrc` silently overrides compose env
+
+**Symptom**
+
+After updating `compose.yaml` (e.g. flipping
+`ZENOH_SESSION_CONFIG_URI` from `session.json5` to
+`session.lan.json5`) and restarting the container, **non-interactive
+`docker exec` shows the right env, but interactive shells started via
+`./run.sh` or `./exec.sh` still have the OLD value**.
+
+For example:
+```
+$ docker exec <container> sh -c 'echo $ZENOH_SESSION_CONFIG_URI'
+/home/dev/zenoh_config/session.lan.json5
+
+$ docker exec <container> bash -lc 'echo $ZENOH_SESSION_CONFIG_URI'
+/home/dev/zenoh_config/session.json5     ← WRONG
+```
+
+This produces the most confusing class of symptom: `topic echo`
+"works" but a `ros2 run ... listener` in your shell doesn't, even
+though they should share the same env.
+
+**Root cause**
+
+The Dockerfile used to append these to `/home/dev/.bashrc`:
+
+```bash
+export RMW_IMPLEMENTATION=rmw_zenoh_cpp
+export ZENOH_SESSION_CONFIG_URI=/home/dev/zenoh_config/session.json5
+```
+
+Interactive bash sources `.bashrc` **after** docker has applied the
+compose-supplied env, so the export overrides whatever
+`compose.yaml` set. Non-interactive `docker exec` does not source
+`.bashrc`, so it sees the correct env. Hence the asymmetry.
+
+**Fix** (commit `6fe7c8d`)
+
+`.bashrc` only sources the ROS overlays now — it does not export
+`RMW_IMPLEMENTATION` or any `ZENOH_*_CONFIG_URI`. `compose.yaml` is
+the single source of truth for those.
+
+**Diagnostic**
+
+If two shells in the "same" container behave differently, check the
+env of the actual offending process:
+
+```bash
+pid=$(docker exec <container> pgrep -f 'demo_nodes_cpp listener')
+docker exec <container> cat /proc/$pid/environ | tr '\0' '\n' | grep -E 'ZENOH|RMW'
+```
+
+That reads the env from the running process itself — bypasses
+`.bashrc`, bypasses compose, shows what's actually loaded.
+
 ## Cosmetic warnings that are NOT problems
 
 Even with everything working, you will still see these. They are

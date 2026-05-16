@@ -4,9 +4,9 @@
 #
 # Usage:
 #   ./set-router-host.sh <host-or-ip>
-#   ./set-router-host.sh 192.168.0.121
+#   ./set-router-host.sh 192.0.2.10
 #   ./set-router-host.sh router.example.com
-#   ./set-router-host.sh 192.168.0.121:7447     # override the port too
+#   ./set-router-host.sh 192.0.2.10:7447     # override the port too
 #
 # Idempotent — running again with a new host just overwrites the previous
 # endpoint.
@@ -14,7 +14,7 @@ set -euo pipefail
 
 if [ $# -ne 1 ]; then
     echo "Usage: $0 <host-or-ip>[:port]" >&2
-    echo "       $0 192.168.0.121" >&2
+    echo "       $0 192.0.2.10" >&2
     echo "       $0 router.example.com" >&2
     exit 1
 fi

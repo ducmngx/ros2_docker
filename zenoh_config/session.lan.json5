@@ -72,10 +72,10 @@
     ///
     /// LAN/remote setting: dial the router on another machine.
     /// REPLACE the placeholder below with the router host's LAN IP
-    /// (e.g. "tcp/192.168.0.121:7447") or, for cloud, a public DNS name
+    /// (e.g. "tcp/192.0.2.10:7447") or, for cloud, a public DNS name
     /// (e.g. "tcp/router.example.com:7447").
     endpoints: [
-      "tcp/192.168.0.31:7447"
+      "tcp/REPLACE-WITH-ROUTER-IP:7447"
     ],
 
     /// Global connect configuration,
