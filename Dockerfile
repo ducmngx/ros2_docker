@@ -54,8 +54,11 @@ WORKDIR /home/${USERNAME}/ros2_ws
 RUN mkdir -p /home/${USERNAME}/ros2_ws/src \
     && echo "source /opt/ros/humble/setup.bash" >> /home/${USERNAME}/.bashrc \
     && echo "source /opt/rmw_zenoh/install/setup.bash" >> /home/${USERNAME}/.bashrc \
-    && echo "[ -f /home/${USERNAME}/ros2_ws/install/setup.bash ] && source /home/${USERNAME}/ros2_ws/install/setup.bash" >> /home/${USERNAME}/.bashrc \
-    && echo "export RMW_IMPLEMENTATION=rmw_zenoh_cpp" >> /home/${USERNAME}/.bashrc \
-    && echo "export ZENOH_SESSION_CONFIG_URI=/home/${USERNAME}/zenoh_config/session.json5" >> /home/${USERNAME}/.bashrc
+    && echo "[ -f /home/${USERNAME}/ros2_ws/install/setup.bash ] && source /home/${USERNAME}/ros2_ws/install/setup.bash" >> /home/${USERNAME}/.bashrc
+# NOTE: Do not export RMW_IMPLEMENTATION / ZENOH_*_CONFIG_URI from .bashrc.
+# compose.yaml is the single source of truth for these. A .bashrc export
+# would silently override the per-machine session config (e.g. force
+# session.json5 on a remote peer that's configured to use
+# session.lan.json5) for interactive shells only — a debugging nightmare.
 
 CMD ["bash"]
